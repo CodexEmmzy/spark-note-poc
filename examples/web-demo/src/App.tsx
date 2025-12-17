@@ -89,7 +89,7 @@ function App() {
           }
           
           const jsCode = await jsResponse.text();
-          
+
           // Create a blob URL for the JS code
           const blob = new Blob([jsCode], { type: 'application/javascript' });
           const blobUrl = URL.createObjectURL(blob);
@@ -100,7 +100,7 @@ function App() {
             
             // Initialize WASM - wasm-bindgen's init function prevents duplicate initialization
             if (wasmModule.default && typeof wasmModule.default === 'function') {
-              await wasmModule.default('/wasm/spark_note_core_bg.wasm');
+        await wasmModule.default('/wasm/spark_note_core_bg.wasm');
             }
             
             return wasmModule as unknown as WasmModule;
@@ -121,7 +121,7 @@ function App() {
         
         if (loadedModule) {
           setWasm(loadedModule);
-          setLoading(false);
+        setLoading(false);
           // Use toast callback to avoid dependency
           toast.success('WASM module loaded successfully');
         }
@@ -357,7 +357,7 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <div className="app">
+    <div className="app">
         <header className="app-header">
         <div className="app-header__content">
           <h1 className="app-title">Spark Note</h1>
@@ -374,7 +374,7 @@ function App() {
         <WorkflowProgress currentStep={flowStep} />
 
         <div className="app-grid">
-          {/* Create Note Card */}
+        {/* Create Note Card */}
           <Card variant="elevated" padding="lg">
             <CardHeader
               icon="N"
@@ -385,8 +385,8 @@ function App() {
               <div className="form-grid">
                 <Input
                   label="Value"
-                  type="number"
-                  value={noteValue}
+              type="number"
+              value={noteValue}
                   onChange={(e) => {
                     const val = e.target.value;
                     if (val === '' || (Number(val) > 0 && Number.isInteger(Number(val)))) {
@@ -405,9 +405,9 @@ function App() {
                 />
                 <Input
                   label="Secret"
-                  type="text"
-                  value={secretHex}
-                  onChange={(e) => setSecretHex(e.target.value)}
+              type="text"
+              value={secretHex}
+              onChange={(e) => setSecretHex(e.target.value)}
                   placeholder="0x..."
                   hint="Hex-encoded secret (min 16 characters)"
                   rightIcon={
@@ -421,20 +421,20 @@ function App() {
                       <span aria-hidden="true">🎲</span>
                     </button>
                   }
-                />
-              </div>
+            />
+          </div>
               <div className="button-group">
                 <Button variant="secondary" onClick={generateSecret} size="md">
                   Generate Secret
                 </Button>
                 <Button
                   variant="primary"
-                  onClick={handleCreateNote}
+              onClick={handleCreateNote}
                   disabled={loading || !wasm || isCreating}
                   isLoading={isCreating}
                   size="md"
-                >
-                  Create Note
+            >
+              Create Note
                 </Button>
               </div>
             </CardBody>
@@ -453,7 +453,7 @@ function App() {
                   <div className="data-item">
                     <div className="data-item__label">Value</div>
                     <div className="data-item__value">{currentNote.value.toLocaleString()} sats</div>
-                  </div>
+              </div>
                   <CodeBlock
                     value={arrayToHex(currentNote.commitment)}
                     label="Commitment Hash"
@@ -463,27 +463,27 @@ function App() {
                   <div className="button-group">
                     <Button
                       variant="primary"
-                      onClick={handleGenerateNullifier}
+                  onClick={handleGenerateNullifier}
                       disabled={isGenerating}
                       isLoading={isGenerating}
                       size="md"
-                    >
-                      Generate Nullifier
+                >
+                  Generate Nullifier
                     </Button>
                     <Button variant="ghost" onClick={handleReset} size="md">
-                      Reset
+                  Reset
                     </Button>
                   </div>
-                </div>
-              ) : (
-                <div className="empty-state">
+              </div>
+          ) : (
+            <div className="empty-state">
                   <p>Create a note to view details</p>
-                </div>
-              )}
+            </div>
+          )}
             </CardBody>
           </Card>
 
-          {/* Nullifier Card */}
+        {/* Nullifier Card */}
           <Card variant="elevated" padding="lg">
             <CardHeader
               icon="H"
@@ -491,7 +491,7 @@ function App() {
               subtitle="Spending identifier and verification"
             />
             <CardBody>
-              {currentNullifier ? (
+          {currentNullifier ? (
                 <div className="data-display">
                   <CodeBlock
                     value={arrayToHex(currentNullifier)}
@@ -501,13 +501,13 @@ function App() {
                   />
                   <div className="button-group">
                     <Button variant="warning" onClick={handleMarkSpent} size="md">
-                      Mark as Spent
+                  Mark as Spent
                     </Button>
                     <Button variant="secondary" onClick={handleVerify} size="md">
                       Verify Status
                     </Button>
-                  </div>
-                  {verificationResult !== null && (
+              </div>
+              {verificationResult !== null && (
                     <div className={`verification-badge verification-badge--${verificationResult ? 'spent' : 'unspent'}`}>
                       <Badge variant={verificationResult ? 'danger' : 'success'} dot>
                         {verificationResult ? 'Spent' : 'Unspent'}
@@ -515,15 +515,15 @@ function App() {
                     </div>
                   )}
                 </div>
-              ) : (
-                <div className="empty-state">
+          ) : (
+            <div className="empty-state">
                   <p>Generate a nullifier to view details</p>
-                </div>
-              )}
+            </div>
+          )}
             </CardBody>
           </Card>
 
-          {/* Spent Nullifiers Card */}
+        {/* Spent Nullifiers Card */}
           <Card variant="elevated" padding="lg">
             <CardHeader
               icon="S"
@@ -538,8 +538,8 @@ function App() {
               }
             />
             <CardBody>
-              {spentNullifiers.length > 0 ? (
-                <div className="nullifier-list">
+          {spentNullifiers.length > 0 ? (
+              <div className="nullifier-list">
                   {noteList.map((item) => (
                     <div key={item.id} className="nullifier-item">
                       <CodeBlock
@@ -547,14 +547,14 @@ function App() {
                         variant="nullifier"
                         maxLength={48}
                       />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="empty-state">
-                  <p>No spent nullifiers yet</p>
-                </div>
-              )}
+                  </div>
+                ))}
+              </div>
+          ) : (
+            <div className="empty-state">
+              <p>No spent nullifiers yet</p>
+            </div>
+          )}
             </CardBody>
           </Card>
         </div>

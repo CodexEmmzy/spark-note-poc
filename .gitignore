@@ -114,3 +114,8 @@ Cargo.lock
 .cache/
 *.cache
 
+# Prevent nested git repositories
+# (but allow the main .git directory)
+**/.git/
+!.git/
+

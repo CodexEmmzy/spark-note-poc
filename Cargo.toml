@@ -1,0 +1,47 @@
+[package]
+name = "spark-note-core"
+version = "0.1.0"
+edition = "2021"
+description = "Spark note management SDK core library"
+license = "MIT"
+repository = "https://github.com/user/spark-note-poc"
+documentation = "https://docs.rs/spark-note-core"
+keywords = ["spark", "note", "privacy", "cryptography", "wasm"]
+categories = ["cryptography", "wasm"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+wasm = ["wasm-bindgen", "js-sys", "web-sys", "console_error_panic_hook", "getrandom/js", "serde-wasm-bindgen"]
+
+[dependencies]
+sha2 = "0.10"
+blake3 = "1.5"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+getrandom = "0.2"
+hex = "0.4"
+zeroize = { version = "1.7", features = ["zeroize_derive"] }
+subtle = "2.5"
+hmac = "0.12"
+
+# UniFFI for native bindings (Swift, Kotlin, Python)
+uniffi = { version = "0.28", features = ["cli"] }
+
+# WASM bindings (optional, enabled with --features wasm)
+wasm-bindgen = { version = "0.2", optional = true }
+js-sys = { version = "0.3", optional = true }
+web-sys = { version = "0.3", optional = true }
+console_error_panic_hook = { version = "0.1", optional = true }
+serde-wasm-bindgen = { version = "0.6", optional = true }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+proptest = "1.5"
+
+[profile.release]
+opt-level = "s"
+lto = true
