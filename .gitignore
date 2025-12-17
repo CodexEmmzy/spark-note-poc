@@ -1,0 +1,116 @@
+# Rust build artifacts
+target/
+**/target/
+Cargo.lock
+*.pdb
+
+# Node.js dependencies and build outputs
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# WASM build outputs
+pkg/
+**/pkg/
+*.wasm
+*.wasm.d.ts
+*.wasm.js
+!examples/web-demo/public/wasm/*.wasm
+!examples/web-demo/public/wasm/*.wasm.d.ts
+!examples/web-demo/public/wasm/*.wasm.js
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+*.env
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+test-results/
+playwright-report/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+*.rej
+
+# Build artifacts
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.rlib
+*.d
+
+# Documentation builds
+doc/
+**/doc/
+
+# UniFFI generated files (if not committed)
+bindings/
+
+# Lock files
+# For libraries, Cargo.lock should be ignored
+# For applications, you may want to commit it
+Cargo.lock
+# package-lock.json can be committed for reproducible builds
+# yarn.lock
+# pnpm-lock.yaml
+
+# Vite
+.vite/
+**/.vite/
+
+# TypeScript
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# ESLint cache
+.eslintcache
+
+# Prettier
+.prettierignore
+
+# Misc
+*.orig
+*.rej
+.cache/
+*.cache
+
