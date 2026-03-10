@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Comprehensive error types for Spark Note operations
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Error, uniffi::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)] // uniffi::Error
 pub enum SparkError {
     /// Secret validation errors
     #[error("Invalid secret: {message}")]
@@ -72,7 +72,7 @@ pub enum SparkError {
 }
 
 /// Error codes for secret validation
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)] // uniffi::Enum
 pub enum SecretErrorCode {
     /// Secret is empty
     Empty,
@@ -85,7 +85,7 @@ pub enum SecretErrorCode {
 }
 
 /// Error codes for value validation
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)] // uniffi::Enum
 pub enum ValueErrorCode {
     /// Value is zero
     Zero,
@@ -96,7 +96,7 @@ pub enum ValueErrorCode {
 }
 
 /// Error codes for nullifier operations
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)] // uniffi::Enum
 pub enum NullifierErrorCode {
     /// Nullifier is already spent
     AlreadySpent,

@@ -1,5 +1,5 @@
 [workspace]
-members = ["spark-note-core"]
+members = ["spark-note-sdk"]
 resolver = "2"
 
 [profile.release]

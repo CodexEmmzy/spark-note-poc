@@ -1,7 +1,7 @@
-//! Spark Note Core Library
+//! ILE Labs Spark SDK
 //!
-//! This crate provides the core functionality for the Spark note management SDK,
-//! including note creation, commitment generation, and nullifier operations.
+//! This crate provides the core functionality for the ILE Labs Spark privacy infrastructure,
+//! including note management, commitment generation, and ZK-SNARK transactions.
 //!
 //! # Overview
 //!
@@ -13,9 +13,9 @@
 //! # Example
 //!
 //! ```rust
-//! use spark_note_core::note::{create_note, note_commitment};
-//! use spark_note_core::nullifier::{generate_nullifier, is_nullifier_spent};
-//! use spark_note_core::secret::Secret;
+//! use spark_note_sdk::note::{create_note, note_commitment};
+//! use spark_note_sdk::nullifier::{generate_nullifier, is_nullifier_spent};
+//! use spark_note_sdk::secret::Secret;
 //! use std::collections::HashSet;
 //!
 //! // Create a new note
@@ -68,26 +68,28 @@ pub use validation::{validate_nullifier, validate_secret, validate_value};
 pub use tezos::{TezosClient, TezosOperationResult};
 
 // UniFFI setup for native bindings
-uniffi::setup_scaffolding!();
+// uniffi::setup_scaffolding!();
 
 use crate::secret::Secret;
 
 /// UniFFI-exported function to create a PublicNote (without secret)
-#[uniffi::export]
+// #[uniffi::export]
 pub fn uniffi_create_note(value: u64, secret: Vec<u8>) -> Result<PublicNote, SparkError> {
     let note = create_note(value, Secret::from(secret))?;
     Ok(PublicNote::from(&note))
 }
 
 /// UniFFI-exported function to get note commitment  
-#[uniffi::export]
+// #[uniffi::export]
 pub fn uniffi_note_commitment(note: &PublicNote) -> Vec<u8> {
     note.commitment.clone()
 }
 
-/// UniFFI-exported function to generate nullifier
-/// Note: This requires the original secret, which should be provided separately
-#[uniffi::export]
+/// UniFFI-exported function to/// ILE Labs Note Manager for state management
+///
+/// This module provides a NoteManager struct for managing multiple notes,
+/// tracking nullifier sets, and providing query methods.
+// #[uniffi::export]
 pub fn uniffi_generate_nullifier(note: &PublicNote, secret: Vec<u8>) -> Result<Vec<u8>, SparkError> {
     // Reconstruct note temporarily for nullifier generation
     let secret = Secret::from(secret);
@@ -106,7 +108,7 @@ pub fn uniffi_generate_nullifier(note: &PublicNote, secret: Vec<u8>) -> Result<V
 
 /// UniFFI-exported function to verify a spending proof.
 /// Returns true if the proof is valid for the given root and nullifier.
-#[uniffi::export]
+// #[uniffi::export]
 pub fn uniffi_verify_spending_proof(
     vk_bytes: Vec<u8>,
     proof_bytes: Vec<u8>,
@@ -125,7 +127,7 @@ pub fn uniffi_verify_spending_proof(
 
 /// UniFFI-exported function to get the default verifying key for the spending circuit.
 /// In a production system, this would be a fixed value from a trusted setup.
-#[uniffi::export]
+// #[uniffi::export]
 pub fn uniffi_get_spending_vk() -> Vec<u8> {
     use ark_serialize::CanonicalSerialize;
     let (_pk, vk) = crate::crypto::setup_spending_snark();

@@ -18,12 +18,59 @@ use ark_r1cs_std::prelude::*;
 use ark_r1cs_std::fields::fp::FpVar;
 use ark_r1cs_std::groups::curves::twisted_edwards::AffineVar;
 use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
+use ark_crypto_primitives::sponge::poseidon::PoseidonSponge;
+use ark_crypto_primitives::sponge::CryptographicSponge;
 use ark_groth16::Groth16;
 use ark_snark::{SNARK, CircuitSpecificSetupSNARK};
 use ark_bls12_381::Bls12_381;
-use ark_std::vec::Vec;
+/// Simple Merkle tree for the anonymity set
+pub struct MerkleTree {
+    leaves: Vec<BlsFr>,
+    tree: Vec<Vec<BlsFr>>,
+}
 
-/// Domain separator used to derive the independent generator H via hash-to-curve.
+impl MerkleTree {
+    pub fn new(leaves: Vec<BlsFr>) -> Self {
+        let mut tree = vec![leaves.clone()];
+        let mut current_level = leaves.clone();
+        
+        while current_level.len() > 1 {
+            let mut next_level = Vec::new();
+            for i in (0..current_level.len()).step_by(2) {
+                let left = current_level[i];
+                let right = if i + 1 < current_level.len() { current_level[i + 1] } else { left };
+                
+                let mut sponge = PoseidonSponge::new(&setup_poseidon_config());
+                sponge.absorb(&vec![left, right]);
+                let parent = sponge.squeeze_field_elements(1).pop().unwrap();
+                next_level.push(parent);
+            }
+            tree.push(next_level.clone());
+            current_level = next_level;
+        }
+        
+        MerkleTree { leaves, tree }
+    }
+    
+    pub fn root(&self) -> BlsFr {
+        self.tree.last().unwrap()[0]
+    }
+    
+    pub fn get_path(&self, index: usize) -> Vec<(BlsFr, bool)> {
+        let mut path = Vec::new();
+        let mut current_index = index;
+        
+        for level in &self.tree[..self.tree.len()-1] {
+            let sibling_index = if current_index % 2 == 0 { current_index + 1 } else { current_index - 1 };
+            let sibling = if sibling_index < level.len() { level[sibling_index] } else { level[current_index] };
+            let is_right = current_index % 2 == 1;
+            path.push((sibling, is_right));
+            current_index /= 2;
+        }
+        
+        path
+    }
+}
 /// H = hash_to_curve("SPARK_PEDERSEN_H_V1") ensures H is provably independent from G
 /// (i.e., no one knows the discrete log relationship between G and H).
 const H_DOMAIN_SEP: &[u8] = b"SPARK_PEDERSEN_H_V1";
@@ -154,7 +201,7 @@ pub fn constant_time_eq_array<const N: usize>(a: &[u8; N], b: &[u8; N]) -> bool 
 // --- Groth16 ZK SNARK (Spending Proof) ---
 
 /// Maximum depth of the Merkle Tree for the anonymity set.
-pub const MERKLE_TREE_DEPTH: usize = 32;
+pub const MERKLE_TREE_DEPTH: usize = 4;
 
 /// The R1CS circuit for spending a Spark note.
 pub struct SpendingCircuit {
@@ -226,7 +273,12 @@ impl ConstraintSynthesizer<BlsFr> for SpendingCircuit {
         nullifier_var.enforce_equal(&computed_nullifier)?;
 
         // --- 6. Merkle Inclusion Check ---
-        let mut current_hash = commit_point_var.x;
+        // Hash the commitment point to get the leaf
+        let mut commit_sponge = PoseidonSpongeVar::new(cs.clone(), &self.poseidon_config);
+        commit_sponge.absorb(&vec![commit_point_var.x, commit_point_var.y])?;
+        let leaf_hash = commit_sponge.squeeze_field_elements(1)?.pop().unwrap();
+        
+        let mut current_hash = leaf_hash;
         let path = self.path.unwrap_or_else(|| vec![(BlsFr::default(), false); MERKLE_TREE_DEPTH]);
         
         for (_i, (sibling_val, is_right)) in path.into_iter().enumerate() {
@@ -547,7 +599,7 @@ mod tests {
         let (pk, vk) = setup_spending_snark();
         let poseidon_config = setup_poseidon_config();
         
-        // We need a Jubjub commitment for the SNARK
+        // Create commitment point
         let g = EdwardsAffine::generator();
         let h_bytes = blake3::hash(b"SPARK_JUBJUB_H").as_bytes().to_vec();
         let h_scalar = JubjubFr::from_le_bytes_mod_order(&h_bytes);
@@ -556,22 +608,20 @@ mod tests {
         let s_scalar = JubjubFr::from_le_bytes_mod_order(secret);
         let commitment_point = (EdwardsProjective::from(g).mul(v_scalar) + EdwardsProjective::from(h).mul(s_scalar)).into_affine();
 
-        // --- Compute valid Merkle Root ---
-        // Leaf is the X-coordinate of the commitment point
-        let mut current_hash = commitment_point.x;
-        let dummy_sibling = BlsFr::from(0u64);
-        let mut path = Vec::new();
+        // Hash commitment to get leaf
+        let mut commit_sponge = PoseidonSponge::new(&poseidon_config);
+        commit_sponge.absorb(&vec![commitment_point.x, commitment_point.y]);
+        let leaf = commit_sponge.squeeze_field_elements(1).pop().unwrap();
         
-        use ark_crypto_primitives::sponge::poseidon::PoseidonSponge;
-        use ark_crypto_primitives::sponge::CryptographicSponge;
-        
-        for _ in 0..MERKLE_TREE_DEPTH {
-            path.push((dummy_sibling, false)); // all left siblings are 0
-            let mut sponge = PoseidonSponge::new(&poseidon_config);
-            sponge.absorb(&vec![current_hash, dummy_sibling]);
-            current_hash = sponge.squeeze_field_elements(1).pop().unwrap();
+        // Create Merkle tree with our leaf and some dummy leaves
+        let mut leaves = vec![leaf];
+        for i in 1..(1 << 4) { // 16 leaves for depth 4
+            leaves.push(BlsFr::from(i as u64));
         }
-        let root = current_hash;
+        let merkle_tree = MerkleTree::new(leaves);
+        let root = merkle_tree.root();
+        let path = merkle_tree.get_path(0); // our leaf is at index 0
+        
         let mut root_bytes = Vec::new();
         root.serialize_compressed(&mut root_bytes).unwrap();
         

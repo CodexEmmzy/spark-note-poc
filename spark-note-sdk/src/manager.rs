@@ -12,7 +12,7 @@ use crate::nullifier::{generate_nullifier, NullifierSet, Nullifier};
 use crate::secret::Secret;
 
 /// Note state tracking
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)] // uniffi::Enum
 pub enum NoteState {
     /// Note has not been spent
     Unspent,
@@ -21,7 +21,7 @@ pub enum NoteState {
 }
 
 /// Public note type for UniFFI (without secret)
-#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
+#[derive(Debug, Clone, Serialize, Deserialize)] // uniffi::Record
 pub struct PublicNote {
     pub value: u64,
     pub commitment: Vec<u8>,
@@ -37,7 +37,7 @@ impl From<&SparkNote> for PublicNote {
 }
 
 /// Entry in the note manager
-#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
+#[derive(Debug, Clone, Serialize, Deserialize)] // uniffi::Record
 pub struct NoteEntry {
     /// The note itself (public fields only)
     pub note: PublicNote,

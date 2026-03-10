@@ -13,7 +13,7 @@ use crate::validation::validate_nullifier;
 pub const CURRENT_VERSION: u32 = 1;
 
 /// Versioned nullifier set for export/import
-#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
+#[derive(Debug, Clone, Serialize, Deserialize)] // uniffi::Record
 pub struct NullifierSetExport {
     /// Format version
     pub version: u32,

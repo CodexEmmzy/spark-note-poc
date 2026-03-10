@@ -100,7 +100,7 @@ pub fn is_nullifier_spent(nullifier: &[u8], spent_set: &HashSet<Vec<u8>>) -> boo
 /// # Example
 /// ```
 /// use std::collections::HashSet;
-/// use spark_note_core::nullifier::check_multiple_nullifiers;
+/// use spark_note_sdk::nullifier::check_multiple_nullifiers;
 ///
 /// let nullifiers = vec![vec![1u8; 32], vec![2u8; 32]];
 /// let mut spent_set = HashSet::new();
@@ -132,7 +132,7 @@ pub fn check_multiple_nullifiers(
 /// # Example
 /// ```
 /// use std::collections::HashSet;
-/// use spark_note_core::nullifier::mark_multiple_as_spent;
+/// use spark_note_sdk::nullifier::mark_multiple_as_spent;
 ///
 /// let mut spent_set = HashSet::new();
 /// let nullifiers = vec![vec![1; 32], vec![2; 32]];
@@ -198,7 +198,7 @@ pub fn get_nullifier_set_size(spent_set: &HashSet<Vec<u8>>) -> usize {
 }
 
 /// Statistics about a nullifier set
-#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
+#[derive(Debug, Clone, Serialize, Deserialize)] // uniffi::Record
 pub struct NullifierSetStats {
     /// Number of nullifiers in the set
     pub count: u64,

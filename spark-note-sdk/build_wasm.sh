@@ -5,15 +5,15 @@ set -e
 
 # 1. Build WASM with wasm-pack
 echo "Building WASM module..."
-wasm-pack build --target bundler --scope spark-note
+wasm-pack build --target bundler --scope ile-labs
 
 # 2. Add professional metadata to package.json
 echo "Updating package.json..."
 cat <<EOF > pkg/package.json
 {
-  "name": "@spark-note/sdk",
+  "name": "@ile-labs/spark-note",
   "version": "0.1.0",
-  "description": "Privacy-preserving SDK for Tezos (Lelantus Spark)",
+  "description": "ILE Labs Spark: High-performance privacy SDK for Tezos (Lelantus Spark)",
   "main": "spark_note_core.js",
   "types": "spark_note_core.d.ts",
   "repository": {

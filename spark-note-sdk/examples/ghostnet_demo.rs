@@ -1,6 +1,6 @@
-use spark_note_core::{NoteManager, create_note};
-use spark_note_core::secret::Secret;
-use spark_note_core::tezos::TezosClient;
+use spark_note_sdk::{NoteManager, create_note};
+use spark_note_sdk::secret::Secret;
+use spark_note_sdk::tezos::TezosClient;
 use std::sync::Arc;
 
 #[tokio::main]
