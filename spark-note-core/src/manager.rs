@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::{SparkError, SparkResult};
 use crate::note::SparkNote;
 use crate::nullifier::{generate_nullifier, NullifierSet, Nullifier};
+use crate::secret::Secret;
 
 /// Note state tracking
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, uniffi::Enum)]
@@ -46,12 +47,36 @@ pub struct NoteEntry {
     pub nullifier: Option<Vec<u8>>,
 }
 
-/// Internal note storage with secret
-#[derive(Debug, Clone)]
+/// Internal note storage with secret (serialized for persistence)
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct InternalNoteEntry {
-    note: SparkNote,
+    /// The note value
+    value: u64,
+    /// The note commitment
+    commitment: Vec<u8>,
+    /// The note secret
+    secret: Vec<u8>,
+    /// Current state
     state: NoteState,
+    /// Nullifier if generated
     nullifier: Option<Vec<u8>>,
+}
+
+impl InternalNoteEntry {
+    fn from_spark_note(note: &SparkNote, state: NoteState, nullifier: Option<Vec<u8>>) -> Self {
+        Self {
+            value: note.value,
+            commitment: note.commitment.clone(),
+            secret: note.secret().as_bytes().to_vec(),
+            state,
+            nullifier,
+        }
+    }
+
+    fn to_spark_note(&self) -> SparkResult<SparkNote> {
+        let secret = Secret::from(self.secret.clone());
+        SparkNote::new(self.value, secret)
+    }
 }
 
 /// Manager for Spark notes and nullifiers
@@ -66,6 +91,8 @@ pub struct NoteManager {
     spent_nullifiers: NullifierSet,
     /// Optional Tezos client for on-chain synchronization
     pub tezos_client: Option<std::sync::Arc<crate::tezos::TezosClient>>,
+    /// Optional sled database for persistence
+    db: Option<sled::Db>,
 }
 
 impl NoteManager {
@@ -75,7 +102,98 @@ impl NoteManager {
             notes: HashMap::new(),
             spent_nullifiers: NullifierSet::new(),
             tezos_client: None,
+            db: None,
         }
+    }
+
+    /// Open a persistent NoteManager using sled
+    pub fn open(path: &str) -> SparkResult<Self> {
+        let db = sled::open(path).map_err(|e| SparkError::OperationError {
+            message: format!("Failed to open database at {}: {}", path, e),
+        })?;
+
+        let mut manager = NoteManager {
+            notes: HashMap::new(),
+            spent_nullifiers: NullifierSet::new(),
+            tezos_client: None,
+            db: Some(db),
+        };
+
+        manager.load_from_db()?;
+        Ok(manager)
+    }
+
+    /// Load state from the database
+    fn load_from_db(&mut self) -> SparkResult<()> {
+        if let Some(db) = &self.db {
+            // Load notes from the "notes" tree
+            let notes_tree = db.open_tree("notes").map_err(|e| SparkError::OperationError {
+                message: format!("Failed to open notes tree: {}", e),
+            })?;
+
+            for item in notes_tree.iter() {
+                let (id_bytes, entry_bytes) = item.map_err(|e| SparkError::SerializationError {
+                    message: format!("Database read error: {}", e),
+                })?;
+
+                let id = String::from_utf8(id_bytes.to_vec()).map_err(|e| SparkError::SerializationError {
+                    message: format!("Invalid ID in database: {}", e),
+                })?;
+
+                let entry: InternalNoteEntry = serde_json::from_slice(&entry_bytes).map_err(|e| SparkError::SerializationError {
+                    message: format!("Failed to deserialize note {}: {}", id, e),
+                })?;
+
+                // If note is spent, ensure its nullifier is in the set
+                if entry.state == NoteState::Spent {
+                    if let Some(nullifier_bytes) = &entry.nullifier {
+                         if let Ok(n) = Nullifier::from_slice(nullifier_bytes) {
+                             self.spent_nullifiers.add(n);
+                         }
+                    }
+                }
+
+                self.notes.insert(id, entry);
+            }
+
+            // Load independent spent nullifiers from the "spent_nullifiers" tree
+            let nullifiers_tree = db.open_tree("spent_nullifiers").map_err(|e| SparkError::OperationError {
+                message: format!("Failed to open spent_nullifiers tree: {}", e),
+            })?;
+
+            for item in nullifiers_tree.iter() {
+                let (nullifier_bytes, _) = item.map_err(|e| SparkError::SerializationError {
+                    message: format!("Database read error: {}", e),
+                })?;
+
+                if let Ok(n) = Nullifier::from_slice(&nullifier_bytes) {
+                    self.spent_nullifiers.add(n);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Save a note to the database
+    fn save_note_to_db(&self, id: &str, entry: &InternalNoteEntry) -> SparkResult<()> {
+        if let Some(db) = &self.db {
+            let notes_tree = db.open_tree("notes").map_err(|e| SparkError::OperationError {
+                message: format!("Failed to open notes tree: {}", e),
+            })?;
+
+            let entry_bytes = serde_json::to_vec(entry).map_err(|e| SparkError::SerializationError {
+                message: format!("Failed to serialize note: {}", e),
+            })?;
+
+            notes_tree.insert(id, entry_bytes).map_err(|e| SparkError::OperationError {
+                message: format!("Database write error: {}", e),
+            })?;
+            
+            db.flush().map_err(|e| SparkError::OperationError {
+                message: format!("Database flush error: {}", e),
+            })?;
+        }
+        Ok(())
     }
     
     /// Sets the Tezos client
@@ -100,11 +218,9 @@ impl NoteManager {
             });
         }
         
-        self.notes.insert(id, InternalNoteEntry {
-            note,
-            state: NoteState::Unspent,
-            nullifier: None,
-        });
+        let entry = InternalNoteEntry::from_spark_note(&note, NoteState::Unspent, None);
+        self.save_note_to_db(&id, &entry)?;
+        self.notes.insert(id, entry);
         
         Ok(())
     }
@@ -119,7 +235,10 @@ impl NoteManager {
     /// * `None` if not found
     pub fn get_note(&self, id: &str) -> Option<NoteEntry> {
         self.notes.get(id).map(|entry| NoteEntry {
-            note: PublicNote::from(&entry.note),
+            note: PublicNote {
+                value: entry.value,
+                commitment: entry.commitment.clone(),
+            },
             state: entry.state.clone(),
             nullifier: entry.nullifier.clone(),
         })
@@ -137,7 +256,10 @@ impl NoteManager {
     pub fn list_notes(&self) -> Vec<(String, NoteEntry)> {
         self.notes.iter().map(|(k, v)| {
             (k.clone(), NoteEntry {
-                note: PublicNote::from(&v.note),
+                note: PublicNote {
+                    value: v.value,
+                    commitment: v.commitment.clone(),
+                },
                 state: v.state.clone(),
                 nullifier: v.nullifier.clone(),
             })
@@ -153,7 +275,10 @@ impl NoteManager {
     /// * `Ok(Option<NoteEntry>)` - The removed note if it existed
     pub fn remove_note(&mut self, id: &str) -> Option<NoteEntry> {
         self.notes.remove(id).map(|entry| NoteEntry {
-            note: PublicNote::from(&entry.note),
+            note: PublicNote {
+                value: entry.value,
+                commitment: entry.commitment.clone(),
+            },
             state: entry.state,
             nullifier: entry.nullifier,
         })
@@ -175,9 +300,14 @@ impl NoteManager {
                 message: format!("Note with ID '{}' not found", id),
             })?;
         
-        let secret = Secret::from(secret);
-        let nullifier = generate_nullifier(&note_entry.note, &secret);
+        let secret_obj = Secret::from(secret);
+        let note = note_entry.to_spark_note()?;
+        let nullifier = generate_nullifier(&note, &secret_obj);
         note_entry.nullifier = Some(nullifier.to_vec());
+        
+        // Save to DB
+        let entry_to_save = note_entry.clone();
+        self.save_note_to_db(id, &entry_to_save)?;
         
         Ok(nullifier.to_vec())
     }
@@ -216,6 +346,10 @@ impl NoteManager {
         self.spent_nullifiers.add(nullifier);
         note_entry.state = NoteState::Spent;
         
+        // Save to DB
+        let entry_to_save = note_entry.clone();
+        self.save_note_to_db(id, &entry_to_save)?;
+        
         Ok(())
     }
     
@@ -238,6 +372,27 @@ impl NoteManager {
         }
         
         self.spent_nullifiers.add(n);
+        
+        // Save spent nullifier set (as a single entry or per-nullifier)
+        // For simplicity, we'll store them in a "nullifiers" tree
+        self.save_spent_nullifier_to_db(nullifier)?;
+        
+        Ok(())
+    }
+
+    fn save_spent_nullifier_to_db(&self, nullifier: &[u8]) -> SparkResult<()> {
+         if let Some(db) = &self.db {
+            let tree = db.open_tree("spent_nullifiers").map_err(|e| SparkError::OperationError {
+                message: format!("Failed to open spent_nullifiers tree: {}", e),
+            })?;
+            
+            tree.insert(nullifier, b"").map_err(|e| SparkError::OperationError {
+                message: format!("Database write error: {}", e),
+            })?;
+            db.flush().map_err(|e| SparkError::OperationError {
+                message: format!("Database flush error: {}", e),
+            })?;
+        }
         Ok(())
     }
     
@@ -314,6 +469,44 @@ impl NoteManager {
         
         let client = self.tezos_client.as_ref().ok_or_else(|| SparkError::tezos_error("Tezos client not configured"))?;
         client.spend(nullifier, &dummy_proof, secret_key).await
+    }
+
+    /// Scan the Tezos blockchain for deposit events and synchronize state
+    /// 
+    /// This method fetches all commitments from the NullifierRegistry contract,
+    /// and for each, attempts to identify if it belongs to the user.
+    /// In a real implementation, this would use trial decryption of an on-chain payload.
+    pub async fn scan(&mut self, _viewing_key: &[u8]) -> SparkResult<usize> {
+        let client = self.tezos_client.as_ref().ok_or_else(|| SparkError::tezos_error("Tezos client not configured"))?;
+        
+        let commitments = client.fetch_deposit_events().await?;
+        let mut discovered = 0;
+
+        for commitment in commitments {
+            // Trial decryption / matching logic
+            // In a POC, we simulate the discovery of a note if it's already in our map
+            // or if we can re-derive it (mock logic)
+            
+            let is_mine = self.notes.values().any(|e| e.commitment == commitment);
+            
+            if is_mine {
+                // If it's already in notes, update its status maybe?
+                // Or if it was missing, we'd add it here.
+                println!("Discovered existing note with commitment {:?}", hex::encode(&commitment));
+                discovered += 1;
+            } else {
+                // Potential discovery of a new note (Trial Decryption Simulation)
+                // In a real scenario, we'd attempt to decrypt a payload here.
+                if commitment == vec![0u8; 48] {  // Simulation: dummy 0-commitment is "ours"
+                     println!("Trial decryption successful for commitment {:?}", hex::encode(&commitment));
+                     // Here we would reconstruct the note and add it to self.notes
+                     // manager.add_note(...)
+                     discovered += 1;
+                }
+            }
+        }
+
+        Ok(discovered)
     }
 }
 
@@ -415,6 +608,30 @@ mod tests {
         
         let ids = manager.list_note_ids();
         assert_eq!(ids.len(), 3);
+    }
+    
+    #[test]
+    fn test_persistence() {
+        use crate::secret::Secret;
+        let db_path = "/tmp/test_spark_db";
+        let _ = std::fs::remove_dir_all(db_path);
+        
+        {
+            let mut manager = NoteManager::open(db_path).unwrap();
+            let secret = Secret::new(vec![1, 2, 3, 4, 5, 6, 7, 8]);
+            let note = create_note(1000, secret).unwrap();
+            manager.add_note("p_note".to_string(), note).unwrap();
+        }
+        
+        // Re-open
+        {
+            let manager = NoteManager::open(db_path).unwrap();
+            assert_eq!(manager.note_count(), 1);
+            let entry = manager.get_note("p_note").unwrap();
+            assert_eq!(entry.note.value, 1000);
+        }
+        
+        let _ = std::fs::remove_dir_all(db_path);
     }
 }
 

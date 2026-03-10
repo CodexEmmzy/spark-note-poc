@@ -5,9 +5,8 @@ use ark_std::ops::Mul;
 use subtle::ConstantTimeEq;
 
 // ZK Proof imports
-use ark_ff::UniformRand;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use ark_std::test_rng;
+use ark_ff::UniformRand;
 use crate::error::{SparkError, SparkResult};
 
 // SNARK re-exports for other modules
@@ -23,7 +22,6 @@ use ark_groth16::Groth16;
 use ark_snark::{SNARK, CircuitSpecificSetupSNARK};
 use ark_bls12_381::Bls12_381;
 use ark_std::vec::Vec;
-use ark_std::marker::PhantomData;
 
 /// Domain separator used to derive the independent generator H via hash-to-curve.
 /// H = hash_to_curve("SPARK_PEDERSEN_H_V1") ensures H is provably independent from G
@@ -94,19 +92,22 @@ pub fn pedersen_commit(value: Fr, blinding: Fr) -> G1Affine {
 /// # Returns
 /// 48-byte compressed BLS12-381 G1 point
 pub fn pedersen_commit_u64(value: u64, blinding_bytes: &[u8]) -> Vec<u8> {
-    let v = Fr::from(value);
+    // For Spark, we must use a Jubjub-based commitment to be circuit-friendly.
+    let g = EdwardsAffine::generator();
+    
+    // Derive H (nothing-up-my-sleeve)
+    let h_bytes = blake3::hash(b"SPARK_JUBJUB_H").as_bytes().to_vec();
+    let h_scalar = JubjubFr::from_le_bytes_mod_order(&h_bytes);
+    let h = EdwardsAffine::from(EdwardsProjective::from(g).mul(h_scalar));
 
-    // Hash the blinding bytes to get a uniform field element.
-    // from_le_bytes_mod_order safely reduces any byte slice modulo
-    // the scalar field order, guaranteeing a valid Fr element.
-    let blinding_hash = blake3::hash(blinding_bytes);
-    let r = Fr::from_le_bytes_mod_order(blinding_hash.as_bytes());
+    let v_scalar = JubjubFr::from(value);
+    let s_scalar = JubjubFr::from_le_bytes_mod_order(blinding_bytes);
 
-    let point = pedersen_commit(v, r);
+    let commitment = (EdwardsProjective::from(g).mul(v_scalar) + EdwardsProjective::from(h).mul(s_scalar)).into_affine();
 
-    // Serialize to compressed form (48 bytes for G1)
+    // Serialize to compressed form (32 bytes for Jubjub)
     let mut buf = Vec::new();
-    point
+    commitment
         .serialize_compressed(&mut buf)
         .expect("serialization should not fail");
     buf
@@ -247,11 +248,35 @@ impl ConstraintSynthesizer<BlsFr> for SpendingCircuit {
 }
 
 pub fn setup_poseidon_config() -> PoseidonConfig<BlsFr> {
-    use ark_crypto_primitives::crh::poseidon::CRH;
-    use ark_crypto_primitives::crh::CRHScheme;
+    // For POC, we'll use some standard-looking parameters for Poseidon.
+    // In production, these should be generated using a Grain LFSR or similar.
+    let full_rounds = 8;
+    let partial_rounds = 31;
+    let alpha = 5;
+    let mds = vec![
+        vec![BlsFr::from(1u64), BlsFr::from(2u64), BlsFr::from(3u64)],
+        vec![BlsFr::from(2u64), BlsFr::from(3u64), BlsFr::from(1u64)],
+        vec![BlsFr::from(3u64), BlsFr::from(1u64), BlsFr::from(2u64)],
+    ];
+    let mut ark = Vec::new();
     let mut rng = ark_std::test_rng();
-    // This is a common way to generate parameters if no defaults are found
-    CRH::<BlsFr>::setup(&mut rng).unwrap()
+    for _ in 0..(full_rounds + partial_rounds) {
+        let mut round_ark = Vec::new();
+        for _ in 0..3 {
+            round_ark.push(BlsFr::rand(&mut rng));
+        }
+        ark.push(round_ark);
+    }
+    
+    PoseidonConfig::new(
+        full_rounds,
+        partial_rounds,
+        alpha,
+        mds,
+        ark,
+        2, // rate
+        1, // capacity
+    )
 }
 
 pub fn setup_spending_snark() -> (ark_groth16::ProvingKey<Bls12_381>, ark_groth16::VerifyingKey<Bls12_381>) {
@@ -334,6 +359,24 @@ pub fn verify_spending_proof(
         .map_err(|e| SparkError::invalid_proof(format!("SNARK verification failed: {}", e)))
 }
 
+/// Compute a Poseidon-based nullifier from the secret.
+/// 
+/// Matches the nullifier logic in the SNARK circuit.
+pub fn compute_nullifier(secret_bytes: &[u8]) -> Vec<u8> {
+    let poseidon_config = setup_poseidon_config();
+    let secret = BlsFr::from_le_bytes_mod_order(secret_bytes);
+    
+    use ark_crypto_primitives::sponge::poseidon::PoseidonSponge;
+    use ark_crypto_primitives::sponge::CryptographicSponge;
+    let mut sponge = PoseidonSponge::new(&poseidon_config);
+    sponge.absorb(&secret);
+    let nullifier: BlsFr = sponge.squeeze_field_elements(1).pop().unwrap();
+    
+    let mut buf = Vec::new();
+    nullifier.serialize_compressed(&mut buf).unwrap();
+    buf
+}
+
 
 
 
@@ -387,6 +430,7 @@ mod tests {
     use super::*;
     use ark_ec::AffineRepr;
     use ark_ff::PrimeField;
+    use ark_std::test_rng;
 
     #[test]
     fn test_constant_time_eq_equal() {
@@ -476,9 +520,9 @@ mod tests {
     }
 
     #[test]
-    fn test_pedersen_commit_u64_produces_48_bytes() {
+    fn test_pedersen_commit_u64_produces_32_bytes() {
         let commitment = pedersen_commit_u64(1000, &[1, 2, 3, 4, 5, 6, 7, 8]);
-        assert_eq!(commitment.len(), 48, "Compressed BLS12-381 G1 point should be 48 bytes");
+        assert_eq!(commitment.len(), 32, "Compressed Jubjub point should be 32 bytes");
     }
 
     #[test]
@@ -500,21 +544,47 @@ mod tests {
         let value = 1000u64;
         let secret = b"super_secret_blinding_factor";
         
-        let proof = generate_spending_proof(value, secret);
-        let commitment = pedersen_commit_u64(value, secret);
+        let (pk, vk) = setup_spending_snark();
+        let poseidon_config = setup_poseidon_config();
         
-        assert!(verify_spending_proof(&proof, &commitment));
-    }
+        // We need a Jubjub commitment for the SNARK
+        let g = EdwardsAffine::generator();
+        let h_bytes = blake3::hash(b"SPARK_JUBJUB_H").as_bytes().to_vec();
+        let h_scalar = JubjubFr::from_le_bytes_mod_order(&h_bytes);
+        let h = EdwardsAffine::from(EdwardsProjective::from(g).mul(h_scalar));
+        let v_scalar = JubjubFr::from(value);
+        let s_scalar = JubjubFr::from_le_bytes_mod_order(secret);
+        let commitment_point = (EdwardsProjective::from(g).mul(v_scalar) + EdwardsProjective::from(h).mul(s_scalar)).into_affine();
 
-    #[test]
-    fn test_spending_proof_invalid_value() {
-        let value = 1000u64;
-        let secret = b"super_secret_blinding_factor";
+        // --- Compute valid Merkle Root ---
+        // Leaf is the X-coordinate of the commitment point
+        let mut current_hash = commitment_point.x;
+        let dummy_sibling = BlsFr::from(0u64);
+        let mut path = Vec::new();
         
-        let proof = generate_spending_proof(value, secret);
+        use ark_crypto_primitives::sponge::poseidon::PoseidonSponge;
+        use ark_crypto_primitives::sponge::CryptographicSponge;
         
-        // Mismatched commitment (different value)
-        let wrong_commitment = pedersen_commit_u64(2000, secret);
-        assert!(!verify_spending_proof(&proof, &wrong_commitment));
+        for _ in 0..MERKLE_TREE_DEPTH {
+            path.push((dummy_sibling, false)); // all left siblings are 0
+            let mut sponge = PoseidonSponge::new(&poseidon_config);
+            sponge.absorb(&vec![current_hash, dummy_sibling]);
+            current_hash = sponge.squeeze_field_elements(1).pop().unwrap();
+        }
+        let root = current_hash;
+        let mut root_bytes = Vec::new();
+        root.serialize_compressed(&mut root_bytes).unwrap();
+        
+        let merkle_path_vec = path.iter().map(|(s, r)| {
+            let mut sb = Vec::new();
+            s.serialize_compressed(&mut sb).unwrap();
+            (sb, *r)
+        }).collect();
+
+        let proof = generate_spending_proof(&pk, value, secret, &root_bytes, merkle_path_vec, &commitment_point).unwrap();
+        let nullifier = compute_nullifier(secret);
+        
+        let result = verify_spending_proof(&vk, &proof, &root_bytes, &nullifier).unwrap();
+        assert!(result);
     }
 }

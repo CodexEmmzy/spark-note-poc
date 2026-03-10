@@ -83,4 +83,19 @@ impl TezosClient {
             status: "applied".to_string(),
         })
     }
+
+    /// Fetch deposit events from the contract
+    /// 
+    /// In a real implementation, this would query an indexer (like TzKT)
+    /// or the node's RPC for contract events.
+    pub async fn fetch_deposit_events(&self) -> SparkResult<Vec<Vec<u8>>> {
+        println!("Fetching deposit events from Tezos contract {}...", self.contract_address);
+        
+        // Simulation: return some dummy commitments
+        // In a real scenario, these would be retrieved from the blockchain
+        Ok(vec![
+            vec![0u8; 48], // Dummy commitment 1
+            vec![1u8; 48], // Dummy commitment 2
+        ])
+    }
 }

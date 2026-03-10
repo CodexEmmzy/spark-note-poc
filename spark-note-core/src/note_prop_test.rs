@@ -7,7 +7,7 @@
 //! unit tests might miss.
 
 use proptest::prelude::*;
-use crate::note::{SparkNote, create_note};
+use crate::note::create_note;
 use crate::secret::Secret;
 use crate::crypto::constant_time_eq;
 use crate::nullifier::generate_nullifier;
@@ -54,8 +54,8 @@ proptest! {
         let secret = Secret::new(secret_bytes);
         let note = create_note(value, secret).unwrap();
         
-        // Commitment should always be 48 bytes (compressed BLS12-381 G1 point)
-        prop_assert_eq!(note.commitment.len(), 48);
+        // Commitment should always be 32 bytes (compressed Jubjub point)
+        prop_assert_eq!(note.commitment.len(), 32);
         
         // Commitment should not be all zeros (extremely unlikely)
         let all_zeros = note.commitment.iter().all(|&b| b == 0);

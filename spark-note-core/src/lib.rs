@@ -142,7 +142,7 @@ mod note_prop_test;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::secret::Secret;
+    use crate::note::create_note;
     use std::collections::HashSet;
 
     #[test]
