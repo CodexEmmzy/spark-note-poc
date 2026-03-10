@@ -87,14 +87,16 @@ impl TezosClient {
     }
 
     /// Fetch deposit events (commitments) from the contract storage
-    /// For CameLIGO big_maps, we would query the big_map contents.
+    /// For CameLIGO big_maps, we would query the big_map contents via RPC or Indexer.
     pub async fn fetch_deposit_events(&self) -> SparkResult<Vec<Vec<u8>>> {
         println!("Fetching commitments from Tezos big_map at {}...", self.contract_address);
         
-        // In a real implementation with indexer:
+        // --- Ghostnet Indexer (TzKT) Logic ---
         // let url = format!("https://api.ghostnet.tzkt.io/v1/contracts/{}/bigmaps/commitments/keys", self.contract_address);
+        // let resp = self.client.get(url).send().await?;
         
-        // For POC, we simulate the retrieval but use the live RPC client type
+        // For the POC, we simulate the results of a successful scan.
+        // This demonstrates the 'Trial Decryption' entry point for the manager.
         Ok(vec![
             vec![0u8; 32], 
             vec![1u8; 32],
