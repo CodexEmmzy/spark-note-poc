@@ -88,7 +88,6 @@ pub fn uniffi_note_commitment(note: &PublicNote) -> Vec<u8> {
 #[uniffi::export]
 pub fn uniffi_generate_nullifier(note: &PublicNote, secret: Vec<u8>) -> Result<Vec<u8>, SparkError> {
     // Reconstruct note temporarily for nullifier generation
-    // This is not ideal but necessary for UniFFI compatibility
     let secret = Secret::from(secret);
     let temp_note = create_note(note.value, secret.clone())?;
     
@@ -101,6 +100,38 @@ pub fn uniffi_generate_nullifier(note: &PublicNote, secret: Vec<u8>) -> Result<V
     
     Ok(generate_nullifier(&temp_note, &secret).to_vec())
 }
+
+
+/// UniFFI-exported function to verify a spending proof.
+/// Returns true if the proof is valid for the given root and nullifier.
+#[uniffi::export]
+pub fn uniffi_verify_spending_proof(
+    vk_bytes: Vec<u8>,
+    proof_bytes: Vec<u8>,
+    merkle_root: Vec<u8>,
+    nullifier: Vec<u8>,
+) -> Result<bool, SparkError> {
+    use crate::crypto::{SpendingProof, Groth16VerifyingKey};
+    use ark_serialize::CanonicalDeserialize;
+    
+    let vk = Groth16VerifyingKey::deserialize_compressed(&vk_bytes[..])
+        .map_err(|e| SparkError::invalid_proof(format!("Invalid VK: {}", e)))?;
+    let proof = SpendingProof::from_bytes(&proof_bytes)?;
+    
+    crate::crypto::verify_spending_proof(&vk, &proof, &merkle_root, &nullifier)
+}
+
+/// UniFFI-exported function to get the default verifying key for the spending circuit.
+/// In a production system, this would be a fixed value from a trusted setup.
+#[uniffi::export]
+pub fn uniffi_get_spending_vk() -> Vec<u8> {
+    use ark_serialize::CanonicalSerialize;
+    let (_pk, vk) = crate::crypto::setup_spending_snark();
+    let mut buf = Vec::new();
+    vk.serialize_compressed(&mut buf).unwrap();
+    buf
+}
+
 
 #[cfg(test)]
 #[path = "note_prop_test.rs"]

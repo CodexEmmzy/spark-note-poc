@@ -10,6 +10,20 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::test_rng;
 use crate::error::{SparkError, SparkResult};
 
+// SNARK re-exports for other modules
+pub use ark_ed_on_bls12_381::{EdwardsAffine, EdwardsProjective, Fr as JubjubFr, Fq as BlsFr};
+pub use ark_groth16::{Proof as Groth16Proof, ProvingKey as Groth16ProvingKey, VerifyingKey as Groth16VerifyingKey};
+
+use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
+use ark_r1cs_std::prelude::*;
+use ark_r1cs_std::fields::fp::FpVar;
+use ark_r1cs_std::groups::curves::twisted_edwards::AffineVar;
+use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
+use ark_groth16::Groth16;
+use ark_snark::{SNARK, CircuitSpecificSetupSNARK};
+use ark_bls12_381::Bls12_381;
+use ark_std::marker::PhantomData;
+
 /// Domain separator used to derive the independent generator H via hash-to-curve.
 /// H = hash_to_curve("SPARK_PEDERSEN_H_V1") ensures H is provably independent from G
 /// (i.e., no one knows the discrete log relationship between G and H).
@@ -135,20 +149,218 @@ pub fn constant_time_eq_array<const N: usize>(a: &[u8; N], b: &[u8; N]) -> bool 
     a.ct_eq(b).into()
 }
 
+// --- Groth16 ZK SNARK (Spending Proof) ---
+
+/// Maximum depth of the Merkle Tree for the anonymity set.
+pub const MERKLE_TREE_DEPTH: usize = 32;
+
+/// The R1CS circuit for spending a Spark note.
+pub struct SpendingCircuit {
+    pub root: Option<BlsFr>,
+    pub nullifier: Option<BlsFr>,
+    pub value: Option<u64>,
+    pub secret: Option<BlsFr>,
+    pub path: Option<Vec<(BlsFr, bool)>>, // (sibling, is_right)
+    pub commitment_point: Option<EdwardsAffine>,
+    pub poseidon_config: PoseidonConfig<BlsFr>,
+}
+
+impl ConstraintSynthesizer<BlsFr> for SpendingCircuit {
+    fn generate_constraints(
+        self,
+        cs: ConstraintSystemRef<BlsFr>,
+    ) -> Result<(), SynthesisError> {
+        // --- 1. Allocate Public Inputs ---
+        let root_var = FpVar::new_input(ark_relations::ns!(cs, "root"), || {
+            self.root.ok_or(SynthesisError::AssignmentMissing)
+        })?;
+        let nullifier_var = FpVar::new_input(ark_relations::ns!(cs, "nullifier"), || {
+            self.nullifier.ok_or(SynthesisError::AssignmentMissing)
+        })?;
+
+        // --- 2. Allocate Private Witnesses ---
+        let value_var = FpVar::new_witness(ark_relations::ns!(cs, "value"), || {
+            Ok(BlsFr::from(self.value.ok_or(SynthesisError::AssignmentMissing)?))
+        })?;
+        let secret_var = FpVar::new_witness(ark_relations::ns!(cs, "secret"), || {
+            self.secret.ok_or(SynthesisError::AssignmentMissing)
+        })?;
+        let commit_point_var = AffineVar::<ark_ed_on_bls12_381::EdwardsConfig, FpVar<BlsFr>>::new_witness(
+            ark_relations::ns!(cs, "commitment_point"),
+            || self.commitment_point.ok_or(SynthesisError::AssignmentMissing),
+        )?;
+
+        // --- 3. Range Check: 0 <= value < 2^64 ---
+        let value_bits = value_var.to_bits_le()?;
+        for i in 64..value_bits.len() {
+            value_bits[i].enforce_equal(&Boolean::FALSE)?;
+        }
+
+        // --- 4. Pedersen Commitment Check: C = v*G + s*H ---
+        let g = EdwardsAffine::generator();
+        let h_bytes = blake3::hash(b"SPARK_JUBJUB_H").as_bytes().to_vec();
+        let h_scalar = JubjubFr::from_le_bytes_mod_order(&h_bytes);
+        let h = EdwardsAffine::from(EdwardsProjective::from(g).mul(h_scalar));
+
+        let g_var = AffineVar::new_constant(ark_relations::ns!(cs, "g"), g)?;
+        let h_var = AffineVar::new_constant(ark_relations::ns!(cs, "h"), h)?;
+
+        let v_bits = value_bits[..64].to_vec();
+        let s_bits = secret_var.to_bits_le()?;
+        
+        let v_g = g_var.scalar_mul_le(v_bits.iter())?;
+        let s_h = h_var.scalar_mul_le(s_bits.iter())?;
+        let expected_commitment = v_g + s_h;
+
+        commit_point_var.enforce_equal(&expected_commitment)?;
+
+        // --- 5. Nullifier Check: nullifier == Poseidon(secret) ---
+        use ark_crypto_primitives::sponge::poseidon::constraints::PoseidonSpongeVar;
+        use ark_crypto_primitives::sponge::constraints::CryptographicSpongeVar;
+        
+        let mut sponge = PoseidonSpongeVar::new(cs.clone(), &self.poseidon_config);
+        sponge.absorb(&secret_var)?;
+        let computed_nullifier = sponge.squeeze_field_elements(1)?.pop().unwrap();
+        nullifier_var.enforce_equal(&computed_nullifier)?;
+
+        // --- 6. Merkle Inclusion Check ---
+        let mut current_hash = commit_point_var.x;
+        let path = self.path.unwrap_or_else(|| vec![(BlsFr::default(), false); MERKLE_TREE_DEPTH]);
+        
+        for (_i, (sibling_val, is_right)) in path.into_iter().enumerate() {
+            let sibling_var = FpVar::new_witness(ark_relations::ns!(cs, "sibling"), || Ok(sibling_val))?;
+            let is_right_var = Boolean::new_witness(ark_relations::ns!(cs, "is_right"), || Ok(is_right))?;
+            
+            let left = is_right_var.select(&sibling_var, &current_hash)?;
+            let right = is_right_var.select(&current_hash, &sibling_var)?;
+            
+            let mut node_sponge = PoseidonSpongeVar::new(cs.clone(), &self.poseidon_config);
+            node_sponge.absorb(&vec![left, right])?;
+            current_hash = node_sponge.squeeze_field_elements(1)?.pop().unwrap();
+        }
+        
+        current_hash.enforce_equal(&root_var)?;
+        
+        Ok(())
+    }
+}
+
+pub fn setup_poseidon_config() -> PoseidonConfig<BlsFr> {
+    use ark_crypto_primitives::crh::poseidon::CRH;
+    use ark_crypto_primitives::crh::CRHScheme;
+    let mut rng = ark_std::test_rng();
+    // This is a common way to generate parameters if no defaults are found
+    CRH::<BlsFr>::setup(&mut rng).unwrap()
+}
+
+pub fn setup_spending_snark() -> (ark_groth16::ProvingKey<Bls12_381>, ark_groth16::VerifyingKey<Bls12_381>) {
+    use rand::SeedableRng;
+    let mut rng = rand_chacha::ChaChaRng::seed_from_u64(12345);
+    let poseidon_config = setup_poseidon_config();
+    
+    let circuit = SpendingCircuit {
+        root: None,
+        nullifier: None,
+        value: None,
+        secret: None,
+        path: None,
+        commitment_point: None,
+        poseidon_config,
+    };
+
+    let (pk, vk) = Groth16::<Bls12_381>::setup(circuit, &mut rng).unwrap();
+    (pk, vk)
+}
+
+/// Generates a Groth16 spending proof for a Spark note.
+pub fn generate_spending_proof(
+    pk: &ark_groth16::ProvingKey<Bls12_381>,
+    value: u64,
+    secret_bytes: &[u8],
+    merkle_root: &[u8],
+    merkle_path: Vec<(Vec<u8>, bool)>,
+    commitment: &EdwardsAffine,
+) -> SparkResult<SpendingProof> {
+    use rand::SeedableRng;
+    let mut rng = rand_chacha::ChaChaRng::from_entropy();
+    let poseidon_config = setup_poseidon_config();
+    
+    let secret = BlsFr::from_le_bytes_mod_order(secret_bytes);
+    let root = BlsFr::from_le_bytes_mod_order(merkle_root);
+    
+    // Compute nullifier: nullifier = Poseidon(secret)
+    use ark_crypto_primitives::sponge::poseidon::PoseidonSponge;
+    use ark_crypto_primitives::sponge::CryptographicSponge;
+    let mut sponge = PoseidonSponge::new(&poseidon_config);
+    sponge.absorb(&secret);
+    let nullifier = sponge.squeeze_field_elements(1).pop().unwrap();
+
+    let path = merkle_path
+        .into_iter()
+        .map(|(sibling, is_right)| (BlsFr::from_le_bytes_mod_order(&sibling), is_right))
+        .collect();
+
+    let circuit = SpendingCircuit {
+        root: Some(root),
+        nullifier: Some(nullifier),
+        value: Some(value),
+        secret: Some(secret),
+        path: Some(path),
+        commitment_point: Some(*commitment),
+        poseidon_config,
+    };
+
+    let proof = Groth16::<Bls12_381>::prove(pk, circuit, &mut rng)
+        .map_err(|e| SparkError::invalid_proof(format!("SNARK proving failed: {}", e)))?;
+        
+    Ok(SpendingProof { proof })
+}
+
+/// Verifies a Groth16 spending proof.
+pub fn verify_spending_proof(
+    vk: &ark_groth16::VerifyingKey<Bls12_381>,
+    proof: &SpendingProof,
+    merkle_root: &[u8],
+    nullifier_bytes: &[u8],
+) -> SparkResult<bool> {
+    let root = BlsFr::from_le_bytes_mod_order(merkle_root);
+    let nullifier = BlsFr::from_le_bytes_mod_order(nullifier_bytes);
+
+    // Public inputs must be in the correct order: root, nullifier
+    let public_inputs = vec![root, nullifier];
+
+    Groth16::<Bls12_381>::verify(vk, &public_inputs, &proof.proof)
+        .map_err(|e| SparkError::invalid_proof(format!("SNARK verification failed: {}", e)))
+}
+
+
+
+
+
+
+
+
 // --- Native Schnorr Sigma Protocol (ZK Proof) ---
 
 /// A Zero-Knowledge Proof of Knowledge (PoK) for a Pedersen commitment.
 /// Proves knowledge of `v` and `r` such that `C = v*G + r*H` without revealing them.
 /// Implemented as a non-interactive Schnorr Sigma Protocol using Fiat-Shamir.
-#[derive(Clone, CanonicalSerialize, CanonicalDeserialize, PartialEq, Eq, Debug)]
+/// A Zero-Knowledge Proof for spending a Spark note.
+#[derive(Clone, CanonicalSerialize, CanonicalDeserialize, Debug)]
 pub struct SpendingProof {
-    /// Public nonce R = k_v*G + k_r*H
-    pub r_point: G1Affine,
-    /// Response for value: s_v = k_v + c*v
-    pub s_v: Fr,
-    /// Response for blinding: s_r = k_r + c*r
-    pub s_r: Fr,
+    /// The Groth16 proof
+    pub proof: ark_groth16::Proof<Bls12_381>,
 }
+
+impl PartialEq for SpendingProof {
+    fn eq(&self, other: &Self) -> bool {
+        // We can compare the serialized bytes if needed, or just return false
+        // Groth16 Proof usually doesn't have a direct eq that is efficient.
+        // For POC, we'll use serialization.
+        self.to_bytes() == other.to_bytes()
+    }
+}
+
 
 impl SpendingProof {
     /// Serialize the proof to a byte vector.
@@ -165,83 +377,8 @@ impl SpendingProof {
     }
 }
 
-/// Computes the Fiat-Shamir challenge `c = Blake3(G || H || C || R)`
-fn compute_challenge(g: &G1Affine, h: &G1Affine, c: &G1Affine, r: &G1Affine) -> Fr {
-    let mut hasher = blake3::Hasher::new();
-    
-    let mut buf = Vec::new();
-    g.serialize_compressed(&mut buf).unwrap();
-    h.serialize_compressed(&mut buf).unwrap();
-    c.serialize_compressed(&mut buf).unwrap();
-    r.serialize_compressed(&mut buf).unwrap();
-    
-    hasher.update(&buf);
-    let hash = hasher.finalize();
-    
-    Fr::from_le_bytes_mod_order(hash.as_bytes())
-}
+// (Removing the old generate_spending_proof and verify_spending_proof)
 
-/// Generate a Zero-Knowledge spending proof.
-pub fn generate_spending_proof(
-    value: u64,
-    blinding_bytes: &[u8],
-) -> SpendingProof {
-    let mut rng = test_rng();
-    
-    let g = generator_g();
-    let h = generator_h();
-
-    let v = Fr::from(value);
-    let r = Fr::from_le_bytes_mod_order(blake3::hash(blinding_bytes).as_bytes());
-    
-    let c = pedersen_commit(v, r);
-
-    // 1. Prover samples random nonces
-    let k_v = Fr::rand(&mut rng);
-    let k_r = Fr::rand(&mut rng);
-
-    // 2. Prover computes public nonce R = k_v*G + k_r*H
-    let r_point = (G1Projective::from(g) * k_v + G1Projective::from(h) * k_r).into_affine();
-
-    // 3. Prover computes fiat-shamir challenge
-    let challenge = compute_challenge(&g, &h, &c, &r_point);
-
-    // 4. Prover computes responses
-    let s_v = k_v + challenge * v;
-    let s_r = k_r + challenge * r;
-
-    SpendingProof {
-        r_point,
-        s_v,
-        s_r,
-    }
-}
-
-/// Verify a spending proof against a public commitment.
-pub fn verify_spending_proof(
-    proof: &SpendingProof,
-    commitment_bytes: &[u8],
-) -> bool {
-    let c = match G1Affine::deserialize_compressed(commitment_bytes) {
-        Ok(point) => point,
-        Err(_) => return false,
-    };
-    
-    let g = generator_g();
-    let h = generator_h();
-
-    // 1. Recompute challenge
-    let challenge = compute_challenge(&g, &h, &c, &proof.r_point);
-
-    // 2. Compute s_v*G + s_r*H
-    let lhs = (G1Projective::from(g) * proof.s_v + G1Projective::from(h) * proof.s_r).into_affine();
-
-    // 3. Compute R + c*C
-    let rhs = (G1Projective::from(proof.r_point) + G1Projective::from(c) * challenge).into_affine();
-
-    // 4. Check equality
-    lhs == rhs
-}
 
 
 #[cfg(test)]
