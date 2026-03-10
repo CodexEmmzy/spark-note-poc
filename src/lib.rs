@@ -15,21 +15,22 @@
 //! ```rust
 //! use spark_note_core::note::{create_note, note_commitment};
 //! use spark_note_core::nullifier::{generate_nullifier, is_nullifier_spent};
+//! use spark_note_core::secret::Secret;
 //! use std::collections::HashSet;
 //!
 //! // Create a new note
-//! let secret = vec![1, 2, 3, 4, 5, 6, 7, 8];
+//! let secret = Secret::new(vec![1, 2, 3, 4, 5, 6, 7, 8]);
 //! let note = create_note(1000, secret.clone()).unwrap();
 //!
-//! // Get the commitment
+//! // Get the Pedersen commitment (48-byte compressed BLS12-381 G1 point)
 //! let commitment = note_commitment(&note);
 //!
 //! // Generate a nullifier for spending
-//! let nullifier = generate_nullifier(&note, secret);
+//! let nullifier = generate_nullifier(&note, &secret);
 //!
 //! // Check if spent
 //! let spent_set: HashSet<Vec<u8>> = HashSet::new();
-//! assert!(!is_nullifier_spent(&nullifier, &spent_set));
+//! assert!(!is_nullifier_spent(nullifier.as_bytes(), &spent_set));
 //! ```
 //!
 //! # Modules
@@ -177,7 +178,7 @@ mod tests {
         let commitment = uniffi_note_commitment(&note);
         let nullifier = uniffi_generate_nullifier(&note, secret).unwrap();
 
-        assert_eq!(commitment.len(), 32);
+        assert_eq!(commitment.len(), 48);
         assert_eq!(nullifier.len(), 32);
     }
 }

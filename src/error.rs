@@ -56,6 +56,13 @@ pub enum SparkError {
         /// Human-readable error message
         message: String,
     },
+    
+    /// ZK Proof errors
+    #[error("Proof error: {message}")]
+    ProofError {
+        /// Human-readable error message
+        message: String,
+    },
 }
 
 /// Error codes for secret validation
@@ -105,6 +112,7 @@ impl SparkError {
             SparkError::WASMInitializationError { .. } => "WASM_INIT_ERROR".to_string(),
             SparkError::SerializationError { .. } => "SERIALIZATION_ERROR".to_string(),
             SparkError::OperationError { .. } => "OPERATION_ERROR".to_string(),
+            SparkError::ProofError { .. } => "PROOF_ERROR".to_string(),
         }
     }
     
@@ -128,6 +136,9 @@ impl SparkError {
             }
             SparkError::OperationError { message } => {
                 format!("Operation failed: {}", message)
+            }
+            SparkError::ProofError { message } => {
+                format!("Proof error: {}", message)
             }
         }
     }
@@ -153,6 +164,13 @@ impl SparkError {
         SparkError::NullifierError {
             message: message.into(),
             code,
+        }
+    }
+
+    /// Create a proof error
+    pub fn invalid_proof(message: impl Into<String>) -> Self {
+        SparkError::ProofError {
+            message: message.into(),
         }
     }
 }

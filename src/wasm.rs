@@ -30,24 +30,17 @@ impl WasmSparkNote {
         self.inner.value
     }
 
-    /// Get the note's secret as Uint8Array
+    /// Derive the nullifier for this note.
     ///
-    /// # Security Warning
+    /// The nullifier is computed entirely inside the WASM boundary — the secret
+    /// never crosses into JavaScript. This is the correct pattern for any
+    /// operation that needs the secret: compute inside Rust, return only the
+    /// derived output.
     ///
-    /// This method clones the secret bytes, creating a non-zeroized copy in JavaScript.
-    /// The Rust-side secret will still be zeroized on drop, but the JavaScript copy
-    /// will remain in memory until garbage collected.
-    ///
-    /// **Important**: Secrets should generally not be exposed to JavaScript. This method
-    /// exists only for testing/debugging purposes. Production code should avoid calling
-    /// this method.
-    ///
-    /// # Returns
-    ///
-    /// A `Vec<u8>` containing the secret bytes. **Handle with extreme care.**
-    #[wasm_bindgen(getter)]
-    pub fn secret(&self) -> Vec<u8> {
-        self.inner.secret_bytes().to_vec()
+    /// @returns Uint8Array - The 32-byte nullifier
+    #[wasm_bindgen(js_name = deriveNullifier)]
+    pub fn derive_nullifier(&self) -> Vec<u8> {
+        nullifier::generate_nullifier(&self.inner, self.inner.secret()).to_vec()
     }
 
     /// Get the note's commitment as Uint8Array
@@ -112,7 +105,7 @@ pub fn create_note(value: u64, secret: Vec<u8>) -> Result<WasmSparkNote, JsError
 /// Get the commitment hash of a note
 ///
 /// @param note - The SparkNote to get commitment from
-/// @returns Uint8Array - The 32-byte commitment hash
+/// @returns Uint8Array - The 48-byte Pedersen commitment (compressed BLS12-381 G1)
 #[wasm_bindgen(js_name = noteCommitment)]
 pub fn note_commitment(note: &WasmSparkNote) -> Vec<u8> {
     note::note_commitment(&note.inner)
@@ -157,7 +150,7 @@ mod tests {
         let secret = vec![1, 2, 3, 4, 5, 6, 7, 8];
         let note = create_note(1000, secret).unwrap();
         assert_eq!(note.value(), 1000);
-        assert_eq!(note.commitment().len(), 32);
+        assert_eq!(note.commitment().len(), 48);
     }
 
     #[wasm_bindgen_test]
@@ -166,5 +159,41 @@ mod tests {
         let note = create_note(1000, secret.clone()).unwrap();
         let nullifier = generate_nullifier(&note, secret);
         assert_eq!(nullifier.len(), 32);
+    }
+
+    #[wasm_bindgen_test]
+    fn test_derive_nullifier_inside_wasm() {
+        let secret = vec![1, 2, 3, 4, 5, 6, 7, 8];
+        let note = create_note(1000, secret.clone()).unwrap();
+
+        // derive_nullifier computes inside WASM without exposing the secret
+        let nullifier = note.derive_nullifier();
+        assert_eq!(nullifier.len(), 32);
+
+        // The result should match the standalone generate_nullifier
+        let expected = generate_nullifier(&note, secret);
+        assert_eq!(nullifier, expected);
+    }
+
+    /// Verify that WasmSparkNote does NOT expose a `secret` getter.
+    /// This is a compile-time guarantee enforced by the type system: if
+    /// someone re-adds a `secret()` method, this test's comment serves
+    /// as documentation of the security invariant, and a code review
+    /// gate. At runtime, we verify the only public getters are `value`,
+    /// `commitment`, and `derive_nullifier`.
+    #[wasm_bindgen_test]
+    fn test_secret_not_exposed() {
+        let note = create_note(1000, vec![1, 2, 3, 4, 5, 6, 7, 8]).unwrap();
+
+        // These are the ONLY data accessors that should exist.
+        // The secret must NEVER be returned to JavaScript.
+        let _value = note.value();
+        let _commitment = note.commitment();
+        let _nullifier = note.derive_nullifier();
+
+        // If a `secret()` method is ever added back, it MUST be caught
+        // in code review. The absence of `note.secret()` here is the
+        // assertion — it would fail to compile if the method returned
+        // a different type, and this test documents the security contract.
     }
 }

@@ -1,0 +1,12 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc cf00c46f0064d6aa59cea2bcd65bd0ec517d8cacf06cdf8d2cd8830a01393a6a # shrinks to value = 1, secret_bytes = [19, 43, 22, 125, 9, 9, 15, 99, 75, 38, 13, 9, 28, 82, 110, 25]
+cc f231a30776ac318ace216ee9184a14bd3a97cb47a03ced55b949fdaad0e89dcd # shrinks to value = 1, secret1_bytes = [99, 36, 79, 65, 20, 166, 28, 38, 52, 136, 21, 49, 48, 65, 8, 75, 20, 119, 17, 37, 19, 8, 17, 98, 62, 110, 70], secret2_bytes = [8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8]
+cc 40152095f9785a1de9ad9e3a9a1e1fccb92203b7505572219617ae2a41f1ddd5 # shrinks to value = 1, secret_bytes = [12, 26, 62, 98, 64, 59, 24, 81, 138, 21, 72, 155, 21, 66, 39, 150, 38, 33, 102, 14, 59, 11, 110, 52, 18, 41, 125, 121, 56, 20, 69, 19, 26, 17, 31, 145, 50, 143, 247]
+cc ecfcbab6f4a4e8d02f08b1409eeded5156e7dd54539d2f17ddcc6d863e850c4a # shrinks to value = 1, secret1_bytes = [8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8], secret2_bytes = [8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 9]
+cc 8ab6b4a51d23782c4ebcc0fbdecea9ee6471b73e7c11a162a6f91e642ddcdeaa # shrinks to value1 = 1, value2 = 2, secret_bytes = [91, 48, 122, 23, 67, 33, 35, 27, 9, 10, 34, 15, 24, 31, 66, 9, 123, 13, 16, 89, 144, 34, 21, 16, 88, 39, 36, 28, 29, 46, 19, 21, 17, 132, 175, 141]
+cc 3fe5c57f0aee465847670b5393f68778168e444d4e694a3585c66c50a7deb170 # shrinks to value = 1, secret_bytes = [129, 17, 13, 50, 18, 86, 16, 67, 18, 22, 190, 12, 22, 65, 110, 204, 19, 169, 70, 17, 84, 151, 138, 152, 30, 23, 68, 27, 81, 31, 13, 82, 139, 26, 12, 23, 113, 107, 88, 108, 110, 22, 153, 131, 11, 38, 43, 68, 16, 186, 22, 82, 34, 43, 74, 17, 35, 63, 42, 172, 37, 36, 12, 12, 159, 47, 28, 35, 136, 117, 29, 28, 163]

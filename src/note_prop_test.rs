@@ -52,8 +52,8 @@ proptest! {
         let secret = Secret::new(secret_bytes);
         let note = create_note(value, secret).unwrap();
         
-        // Commitment should always be 32 bytes (SHA-256 output)
-        prop_assert_eq!(note.commitment.len(), 32);
+        // Commitment should always be 48 bytes (compressed BLS12-381 G1 point)
+        prop_assert_eq!(note.commitment.len(), 48);
         
         // Commitment should not be all zeros (extremely unlikely)
         let all_zeros = note.commitment.iter().all(|&b| b == 0);

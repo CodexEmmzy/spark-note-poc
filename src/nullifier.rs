@@ -111,9 +111,9 @@ pub fn is_nullifier_spent(nullifier: &[u8], spent_set: &HashSet<Vec<u8>>) -> boo
 /// use std::collections::HashSet;
 /// use spark_note_core::nullifier::check_multiple_nullifiers;
 ///
-/// let nullifiers = vec![vec![1, 2, 3], vec![4, 5, 6]];
+/// let nullifiers = vec![vec![1u8; 32], vec![2u8; 32]];
 /// let mut spent_set = HashSet::new();
-/// spent_set.insert(vec![1, 2, 3]);
+/// spent_set.insert(vec![1u8; 32]);
 ///
 /// let results = check_multiple_nullifiers(&nullifiers, &spent_set);
 /// assert_eq!(results, vec![true, false]);

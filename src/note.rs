@@ -4,11 +4,12 @@
 //! creating notes and generating commitments.
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+
 
 use crate::error::{SparkError, SparkResult};
 use crate::validation::{validate_secret, validate_value};
 use crate::secret::Secret;
+use crate::crypto::{self, SpendingProof};
 
 /// A Spark note representing a value commitment
 ///
@@ -20,7 +21,7 @@ use crate::secret::Secret;
 pub struct SparkNote {
     /// The value contained in this note
     pub value: u64,
-    /// The commitment hash (domain-separated SHA-256)
+    /// Pedersen commitment (compressed BLS12-381 G1 point, 48 bytes)
     pub commitment: Vec<u8>,
     /// The secret used to generate the commitment (private, zeroized on drop)
     secret: Secret,
@@ -54,6 +55,13 @@ impl SparkNote {
     /// Get a reference to the secret
     pub fn secret(&self) -> &Secret {
         &self.secret
+    }
+
+    /// Generate a ZK spending proof for this note.
+    /// 
+    /// Proves knowledge of the value and secret that open this note's commitment.
+    pub fn prove_spending(&self) -> SpendingProof {
+        crypto::generate_spending_proof(self.value, self.secret.as_bytes())
     }
 }
 
@@ -118,26 +126,15 @@ pub fn note_commitment(note: &SparkNote) -> Vec<u8> {
     note.commitment.clone()
 }
 
-/// Compute a commitment to a value and secret
+/// Compute a Pedersen commitment to a value using the secret as blinding factor.
 ///
-/// Uses domain separation and proper encoding to prevent length extension attacks.
-/// Format: SHA-256(domain_separator || value_be || secret_len_be || secret)
+/// Returns the compressed BLS12-381 G1 point (48 bytes).
+/// C = value·G + blinding(secret)·H
+///
+/// This commitment scheme is additively homomorphic:
+/// commit(a) + commit(b) = commit(a + b), enabling ZK balance proofs.
 fn compute_commitment(value: u64, secret: &[u8]) -> Vec<u8> {
-    let mut hasher = Sha256::new();
-    
-    // Domain separator to prevent cross-protocol attacks
-    hasher.update(b"SPARK_COMMITMENT_V1");
-    
-    // Use big-endian for consistency and determinism
-    hasher.update(&value.to_be_bytes());
-    
-    // Include length prefix to prevent length extension attacks
-    hasher.update(&(secret.len() as u64).to_be_bytes());
-    
-    // Include the secret
-    hasher.update(secret);
-    
-    hasher.finalize().to_vec()
+    crate::crypto::pedersen_commit_u64(value, secret)
 }
 
 #[cfg(test)]
@@ -151,7 +148,7 @@ mod tests {
 
         assert_eq!(note.value, 1000);
         assert_eq!(note.secret_bytes(), secret.as_bytes());
-        assert_eq!(note.commitment.len(), 32); // SHA-256 produces 32 bytes
+        assert_eq!(note.commitment.len(), 48); // Compressed BLS12-381 G1 point
     }
 
     #[test]
@@ -216,7 +213,7 @@ mod tests {
 
         assert_eq!(commitment, note.commitment);
         // Verify it's a clone, not a reference
-        assert_eq!(commitment.len(), 32);
+        assert_eq!(commitment.len(), 48);
     }
     
     #[test]
@@ -242,5 +239,18 @@ mod tests {
         let note2 = create_note(value, s2).unwrap();
         
         assert_ne!(note1.commitment, note2.commitment);
+    }
+
+    #[test]
+    fn test_end_to_end_spending_proof() {
+        let secret = Secret::new(vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        let note = create_note(1000, secret).unwrap();
+
+        // 1. Prover creates a spending proof
+        let proof = note.prove_spending();
+
+        // 2. Verifier checks the proof using only the public commitment
+        let commitment_bytes = note_commitment(&note);
+        assert!(crypto::verify_spending_proof(&proof, &commitment_bytes));
     }
 }
