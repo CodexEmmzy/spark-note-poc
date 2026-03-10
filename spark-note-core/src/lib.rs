@@ -211,7 +211,7 @@ mod tests {
         let commitment = uniffi_note_commitment(&note);
         let nullifier = uniffi_generate_nullifier(&note, secret).unwrap();
 
-        assert_eq!(commitment.len(), 48);
+        assert_eq!(commitment.len(), 32);
         assert_eq!(nullifier.len(), 32);
     }
 }

@@ -12,19 +12,10 @@ use crate::secret::Secret;
 use crate::validation::validate_nullifier;
 pub use crate::nullifier_type::Nullifier;
 
-/// Generates a nullifier for a given note
-///
-/// The nullifier is computed as BLAKE3(commitment || secret), which creates
-/// a unique identifier that can be used to prevent double-spending without
-/// revealing the note's contents.
-pub fn generate_nullifier(note: &SparkNote, secret: &Secret) -> Nullifier {
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(&note.commitment);
-    hasher.update(secret.as_bytes());
-    let hash = hasher.finalize();
-    
+pub fn generate_nullifier(_note: &SparkNote, secret: &Secret) -> Nullifier {
+    let bytes_vec = crate::crypto::compute_nullifier(secret.as_bytes());
     let mut bytes = [0u8; 32];
-    bytes.copy_from_slice(hash.as_bytes());
+    bytes.copy_from_slice(&bytes_vec[..32]);
     Nullifier::new(bytes)
 }
 
