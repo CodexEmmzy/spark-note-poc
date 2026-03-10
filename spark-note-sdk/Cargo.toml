@@ -1,13 +1,13 @@
 [package]
 name = "spark-note-sdk"
 version = "0.1.0"
-authors = ["ILE Labs <contact@ilelabs.io>"]
+authors = ["ILE Labs <contact@ilelabs.org>"]
 edition = "2021"
 description = "ILE Labs Spark: High-performance privacy infrastructure for Tezos. A production-grade SDK for private note management and ZK-SNARK transactions."
 license = "Apache-2.0"
 repository = "https://github.com/ILE-Labs/spark-note-poc"
 documentation = "https://docs.rs/spark-note-sdk"
-homepage = "https://ilelabs.io"
+homepage = "https://ilelabs.org"
 keywords = ["ile-labs", "tezos", "privacy-sdk", "zk-snark", "cryptography"]
 categories = ["cryptography", "wasm", "blockchain"]
 readme = "../README.md"

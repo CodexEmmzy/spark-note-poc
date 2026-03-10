@@ -1,6 +1,6 @@
 # ILE Labs Spark SDK
 
-[![ILE Labs](https://img.shields.io/badge/Product-ILE%20Labs-blue.svg)](https://ilelabs.io)
+[![ILE Labs](https://img.shields.io/badge/Product-ILE%20Labs-blue.svg)](https://ilelabs.org)
 [![Rust](https://img.shields.io/badge/Rust-1.75+-orange.svg)](https://www.rust-lang.org/)
 [![Tezos](https://img.shields.io/badge/Tezos-Ghostnet-blue.svg)](https://tezos.com/)[![Tests](https://img.shields.io/badge/Tests-76%20passed-brightgreen.svg)](https://github.com/ILE-Labs/spark-note-poc)[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 
@@ -24,8 +24,8 @@ Spark Note enables privacy-preserving transactions on Tezos by decoupling asset 
 ✅ **Testing**: 76 comprehensive tests including property-based testing  
 ✅ **Documentation**: Complete API docs with working examples  
 
-🔄 **In Progress**: WASM bindings, UniFFI native bindings, production deployment  
-📋 **Next Steps**: Trusted setup ceremony, contract deployment, performance optimization
+ **In Progress**: WASM bindings, UniFFI native bindings, production deployment  
+ **Next Steps**: Trusted setup ceremony, contract deployment, performance optimization
 
 ## Getting Started
 
@@ -170,7 +170,7 @@ This demonstrates how ILE Labs Spark can be used in browser environments for dec
 
 ILE Labs Spark is designed for production deployment across the Tezos ecosystem. Our development roadmap focuses on enterprise-grade features and cross-platform compatibility.
 
-### ✅ Completed Features
+###  Completed Features
 - **Core Privacy Infrastructure**: Jubjub curve Pedersen commitments with Poseidon hashing
 - **ZK-SNARK Circuits**: Groth16 spending proofs with full Merkle inclusion verification
 - **Tezos RPC Integration**: Complete operation lifecycle (forge, sign, inject)
@@ -178,13 +178,13 @@ ILE Labs Spark is designed for production deployment across the Tezos ecosystem.
 - **Comprehensive Testing**: 76 automated tests including property-based cryptography validation
 - **Developer Experience**: Full Rust API documentation and working examples
 
-### 🔄 In Development
+###  In Development
 - **On-Chain Verification**: Native Michelson Groth16 verifier contracts
 - **WASM Bindings**: NPM package for seamless web integration
 - **Native SDKs**: Swift, Kotlin, and Python bindings via UniFFI
 - **Production Deployment**: Trusted setup ceremony and mainnet contract deployment
 
-### 📋 Planned Features
+###  Planned Features
 - **Multi-Asset Support**: Extend beyond tez to support FA2 tokens
 - **Batch Transactions**: Optimize for high-throughput privacy operations
 - **Hardware Security**: Integration with HSMs and secure enclaves
@@ -193,7 +193,7 @@ ILE Labs Spark is designed for production deployment across the Tezos ecosystem.
 ### Contributing
 ILE Labs welcomes contributions to Spark. See our [Contributing Guide](CONTRIBUTING.md) for details on development setup and coding standards.
 
-For enterprise inquiries or custom integrations, contact us at [contact@ilelabs.io](mailto:contact@ilelabs.io).
+For enterprise inquiries or custom integrations, contact us at [contact@ilelabs.org](mailto:contact@ilelabs.org).
 
 
 
