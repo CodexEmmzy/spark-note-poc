@@ -1,3 +1,5 @@
+#![cfg(not(target_arch = "wasm32"))]
+
 //! Property-based tests for Spark Note operations
 //!
 //! These tests use proptest to verify cryptographic properties

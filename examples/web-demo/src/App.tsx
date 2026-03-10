@@ -15,11 +15,10 @@ interface SparkNote {
 interface WasmModule {
   createNote(value: bigint, secret: Uint8Array): {
     value: bigint;
-    secret: Uint8Array;
     commitment: Uint8Array;
+    deriveNullifier(): Uint8Array;
     free(): void;
   };
-  generateNullifier(note: { value: bigint; secret: Uint8Array; commitment: Uint8Array }, secret: Uint8Array): Uint8Array;
   isNullifierSpent(nullifier: Uint8Array, spentSet: Uint8Array[]): boolean;
 }
 
@@ -270,7 +269,7 @@ function App() {
       const wasmNote = wasm.createNote(value, secret);
       const note: SparkNote = {
         value: wasmNote.value,
-        secret: new Uint8Array(wasmNote.secret),
+        secret: new Uint8Array(secret), // Keep exactly the input secret for later use
         commitment: new Uint8Array(wasmNote.commitment),
       };
       wasmNote.free();
@@ -293,8 +292,11 @@ function App() {
 
     try {
       setIsGenerating(true);
+      // Re-create the secure WASM note wrapper from the stored parameters
       const wasmNote = wasm.createNote(currentNote.value, currentNote.secret);
-      const nullifier = wasm.generateNullifier(wasmNote, currentNote.secret);
+      
+      // Derive nullifier exclusively inside the WASM boundary
+      const nullifier = wasmNote.deriveNullifier();
       wasmNote.free();
 
       setCurrentNullifier(new Uint8Array(nullifier));

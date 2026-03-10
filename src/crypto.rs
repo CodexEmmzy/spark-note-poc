@@ -1,7 +1,6 @@
-use ark_bls12_381::{Bls12_381, Fr, G1Affine, G1Projective};
+use ark_bls12_381::{Fr, G1Affine, G1Projective};
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{Field, PrimeField};
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use ark_ff::PrimeField;
 use ark_std::ops::Mul;
 use subtle::ConstantTimeEq;
 

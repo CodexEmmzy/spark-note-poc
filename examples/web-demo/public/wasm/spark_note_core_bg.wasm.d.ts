@@ -1,17 +1,6 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
-export const init: () => void;
-export const __wbg_wasmsparknote_free: (a: number, b: number) => void;
-export const wasmsparknote_value: (a: number) => bigint;
-export const wasmsparknote_secret: (a: number) => [number, number];
-export const wasmsparknote_commitment: (a: number) => [number, number];
-export const wasmsparknote_toJSON: (a: number) => [number, number, number, number];
-export const wasmsparknote_fromJSON: (a: number, b: number) => [number, number, number];
-export const createNote: (a: bigint, b: number, c: number) => [number, number, number];
-export const noteCommitment: (a: number) => [number, number];
-export const generateNullifier: (a: number, b: number, c: number) => [number, number];
-export const isNullifierSpent: (a: number, b: number, c: any) => [number, number, number];
 export const ffi_spark_note_core_uniffi_contract_version: () => number;
 export const ffi_spark_note_core_rustbuffer_alloc: (a: number, b: bigint, c: number) => void;
 export const ffi_spark_note_core_rustbuffer_from_bytes: (a: number, b: number, c: number) => void;
@@ -75,11 +64,5 @@ export const uniffi_spark_note_core_fn_func_uniffi_note_commitment: (a: number, 
 export const uniffi_spark_note_core_checksum_func_uniffi_note_commitment: () => number;
 export const uniffi_spark_note_core_fn_func_uniffi_generate_nullifier: (a: number, b: number, c: number, d: number) => void;
 export const uniffi_spark_note_core_checksum_func_uniffi_generate_nullifier: () => number;
-export const __wbindgen_malloc: (a: number, b: number) => number;
-export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
-export const __wbindgen_exn_store: (a: number) => void;
-export const __externref_table_alloc: () => number;
 export const __wbindgen_externrefs: WebAssembly.Table;
-export const __wbindgen_free: (a: number, b: number, c: number) => void;
-export const __externref_table_dealloc: (a: number) => void;
 export const __wbindgen_start: () => void;

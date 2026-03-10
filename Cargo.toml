@@ -26,7 +26,8 @@ ark-serialize = { version = "0.4", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "1.0"
-getrandom = "0.2"
+getrandom = { version = "0.2", features = ["js"] }
+getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
 hex = "0.4"
 zeroize = { version = "1.7", features = ["zeroize_derive"] }
 subtle = "2.5"

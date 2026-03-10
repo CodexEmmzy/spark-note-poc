@@ -111,16 +111,7 @@ pub fn note_commitment(note: &WasmSparkNote) -> Vec<u8> {
     note::note_commitment(&note.inner)
 }
 
-/// Generate a nullifier for spending a note
-///
-/// @param note - The SparkNote to generate nullifier for
-/// @param secret - The spending secret as Uint8Array
-/// @returns Uint8Array - The 32-byte nullifier hash
-#[wasm_bindgen(js_name = generateNullifier)]
-pub fn generate_nullifier(note: &WasmSparkNote, secret: Vec<u8>) -> Vec<u8> {
-    let secret = Secret::from(secret);
-    nullifier::generate_nullifier(&note.inner, &secret).to_vec()
-}
+
 
 /// Check if a nullifier has been spent
 ///
