@@ -5,10 +5,10 @@
 //!
 //! # Overview
 //!
-//! The library implements a simplified proof-of-concept demonstrating:
-//! - Note creation with cryptographic commitments
-//! - Nullifier generation for spent tracking
-//! - Commitment verification
+//! The library implements a privacy-preserving SDK demonstrating:
+//! - **Note creation**: Cryptographic Jubjub-based Pedersen commitments.
+//! - **ZK Proofs**: Groth16 proofs for value safety and private ownership.
+//! - **Nullifier Privacy**: Poseidon-based PRF for private spend tracking on-chain.
 //!
 //! # Example
 //!
@@ -19,13 +19,13 @@
 //! use std::collections::HashSet;
 //!
 //! // Create a new note
-//! let secret = Secret::new(vec![1, 2, 3, 4, 5, 6, 7, 8]);
+//! let secret = Secret::new(vec![1; 32]);
 //! let note = create_note(1000, secret.clone()).unwrap();
 //!
-//! // Get the Pedersen commitment (48-byte compressed BLS12-381 G1 point)
+//! // Get the Pedersen commitment (32-byte compressed Jubjub point)
 //! let commitment = note_commitment(&note);
 //!
-//! // Generate a nullifier for spending
+//! // Generate a nullifier for spending (Poseidon PRF)
 //! let nullifier = generate_nullifier(&note, &secret);
 //!
 //! // Check if spent

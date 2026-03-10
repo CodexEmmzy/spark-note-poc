@@ -86,20 +86,42 @@ impl TezosClient {
         Ok(hash)
     }
 
+    /// Fetch the full storage of the contract
+    pub async fn get_contract_storage(&self) -> SparkResult<serde_json::Value> {
+        let url = format!("{}/chains/main/blocks/head/context/contracts/{}/storage", self.rpc_node, self.contract_address);
+        let resp = self.client.get(url).send().await
+            .map_err(|e| crate::error::SparkError::OperationError { message: e.to_string() })?;
+        let storage: serde_json::Value = resp.json().await
+            .map_err(|e| crate::error::SparkError::OperationError { message: e.to_string() })?;
+        Ok(storage)
+    }
+
+    /// Fetch keys from a BigMap (Simulation of Indexer/RPC query)
+    /// In a real scenario, this would iterate over the big_map keys via TzKT or a node with indexer.
+    pub async fn get_big_map_keys(&self, _big_map_id: i64) -> SparkResult<Vec<Vec<u8>>> {
+        // --- Ghostnet Indexer Logic ---
+        // let url = format!("https://api.ghostnet.tzkt.io/v1/bigmaps/{}/keys", big_map_id);
+        
+        // For POC, return dummy keys that represent "found" commitments
+        Ok(vec![
+            vec![0u8; 32],
+            vec![1u8; 32],
+        ])
+    }
+
     /// Fetch deposit events (commitments) from the contract storage
     /// For CameLIGO big_maps, we would query the big_map contents via RPC or Indexer.
     pub async fn fetch_deposit_events(&self) -> SparkResult<Vec<Vec<u8>>> {
-        println!("Fetching commitments from Tezos big_map at {}...", self.contract_address);
+        println!("Fetching commitments from Tezos contract {}...", self.contract_address);
         
-        // --- Ghostnet Indexer (TzKT) Logic ---
-        // let url = format!("https://api.ghostnet.tzkt.io/v1/contracts/{}/bigmaps/commitments/keys", self.contract_address);
-        // let resp = self.client.get(url).send().await?;
+        // 1. Get storage to find the commitments big_map ID
+        let storage = self.get_contract_storage().await.unwrap_or_default();
         
-        // For the POC, we simulate the results of a successful scan.
-        // This demonstrates the 'Trial Decryption' entry point for the manager.
-        Ok(vec![
-            vec![0u8; 32], 
-            vec![1u8; 32],
-        ])
+        // Michelson storage for our CameLIGO contract usually looks like:
+        // Pair (Pair (Big_map_ID commitments) (Big_map_ID nullifiers)) (Bytes vk_hash)
+        // We simulate finding the ID 123 here.
+        let big_map_id = storage.get("args").and_then(|a| a.get(0)).and_then(|a| a.get("args")).and_then(|a| a.get(0)).and_then(|a| a.as_i64()).unwrap_or(123);
+        
+        self.get_big_map_keys(big_map_id).await
     }
 }

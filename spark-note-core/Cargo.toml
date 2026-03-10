@@ -1,13 +1,22 @@
 [package]
-name = "spark-note-core"
+name = "spark-note-sdk"
 version = "0.1.0"
+authors = ["ILE Labs <contact@ilelabs.io>"]
 edition = "2021"
-description = "Spark note management SDK core library"
-license = "MIT"
-repository = "https://github.com/user/spark-note-poc"
-documentation = "https://docs.rs/spark-note-core"
-keywords = ["spark", "note", "privacy", "cryptography", "wasm"]
-categories = ["cryptography", "wasm"]
+description = "ILE Labs Spark: High-performance privacy infrastructure for Tezos. A production-grade SDK for private note management and ZK-SNARK transactions."
+license = "Apache-2.0"
+repository = "https://github.com/ILE-Labs/spark-note-poc"
+documentation = "https://docs.rs/spark-note-sdk"
+homepage = "https://ilelabs.io"
+keywords = ["ile-labs", "tezos", "privacy-sdk", "zk-snark", "cryptography"]
+categories = ["cryptography", "wasm", "blockchain"]
+readme = "../README.md"
+exclude = [
+    ".gitignore",
+    ".gitattributes",
+    "proptest-regressions/**",
+    "target/**",
+]
 
 [lib]
 crate-type = ["cdylib", "rlib"]

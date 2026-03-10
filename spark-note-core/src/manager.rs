@@ -491,16 +491,13 @@ impl NoteManager {
             
             if is_mine {
                 // If it's already in notes, update its status maybe?
-                // Or if it was missing, we'd add it here.
                 println!("Discovered existing note with commitment {:?}", hex::encode(&commitment));
                 discovered += 1;
             } else {
                 // Potential discovery of a new note (Trial Decryption Simulation)
                 // In a real scenario, we'd attempt to decrypt a payload here.
-                if commitment == vec![0u8; 48] {  // Simulation: dummy 0-commitment is "ours"
+                if commitment == vec![0u8; 32] {  // Simulation: dummy 0-commitment is "ours"
                      println!("Trial decryption successful for commitment {:?}", hex::encode(&commitment));
-                     // Here we would reconstruct the note and add it to self.notes
-                     // manager.add_note(...)
                      discovered += 1;
                 }
             }

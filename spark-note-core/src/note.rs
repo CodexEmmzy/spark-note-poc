@@ -8,19 +8,19 @@ use crate::validation::{validate_secret, validate_value};
 use crate::secret::Secret;
 use crate::crypto::{self, SpendingProof};
 
-/// A Spark note representing a value commitment
+/// A Spark note representing a private value commitment.
 ///
-/// The note contains:
-/// - `value`: The monetary value of the note
-/// - `secret`: A random secret used for privacy (automatically zeroized on drop)
-/// - `commitment`: A cryptographic commitment to the value and secret
+/// Each note acts as a "private coin" in the system. It uses a Pedersen commitment
+/// to hide the value and owner secret, while allowing Zero-Knowledge proofs
+/// to verify that the value remains within safe bounds.
 #[derive(Debug, Clone)]
 pub struct SparkNote {
-    /// The value contained in this note
+    /// The unblinded value contained in this note.
     pub value: u64,
-    /// Pedersen commitment (compressed BLS12-381 G1 point, 48 bytes)
+    /// Pedersen commitment (compressed Jubjub point, 32 bytes).
+    /// This commitment is used on-chain to identify the note in the anonymity set.
     pub commitment: Vec<u8>,
-    /// The secret used to generate the commitment (private, zeroized on drop)
+    /// The random spending secret (private, zeroized on drop).
     secret: Secret,
 }
 
@@ -33,10 +33,12 @@ impl PartialEq for SparkNote {
 impl Eq for SparkNote {}
 
 impl SparkNote {
-    /// Creates a new SparkNote with the given value and secret
+    /// Creates a new SparkNote with the given value and secret.
     ///
-    /// Returns error if secret is empty or value is zero.
-    /// Uses domain-separated commitment scheme to prevent length extension attacks.
+    /// # Errors
+    /// Returns `SparkError::ValidationError` if:
+    /// - The value is zero (to prevent dust/spam).
+    /// - The secret is of insufficient length (must be at least 16 bytes for security).
     pub fn new(value: u64, secret: Secret) -> SparkResult<Self> {
         validate_value(value)?;
         validate_secret(secret.as_bytes())?;
